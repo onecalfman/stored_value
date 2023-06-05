@@ -1,14 +1,14 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
-import 'package:json_annotation/json_annotation.dart';
 import 'package:value_store/value_store.dart';
 
-part 'main.g.dart';
+import 'values.dart';
 
 void main() async {
-  await ValueStore.init();
+  await initHive();
   runApp(const MyApp());
 }
 
@@ -19,30 +19,19 @@ class MyApp extends StatefulWidget {
   State<MyApp> createState() => _MyAppState();
 }
 
-@JsonSerializable()
-class Unser with Serde<Unser> {
-  int a;
-  int b;
-
-  Unser([this.a = 3, this.b = 2]);
-
-  @override
-  fromJson(json) => _$UnserFromJson(json);
-
-  @override
-  Map<String, dynamic> toJson(Unser t) => _$UnserToJson(t);
-}
-
 class _MyAppState extends State<MyApp> {
-  final val = StoredValue("teother", 104);
-  final val2 = StoredJsonValue("teother3", Unser());
+  final val1 = StoredValue("one", 104);
+  final val2 = StoredJsonValue("two", Unserializable());
+  final val3 = StoredValue("three", Other(5));
+  final val4 = StoredValue("four", TimedString("ok"));
 
   void updater() {
-    Timer(const Duration(seconds: 1), () => val.value = val.value + 1);
-    Timer.periodic(
-        const Duration(seconds: 5),
-        (_) =>
-            val2.value = Unser(Random().nextInt(100), Random().nextInt(100)));
+    Timer(const Duration(seconds: 1), () => val1.value = val1.value + 1);
+    Timer.periodic(const Duration(seconds: 5), (_) {
+      val2.value = Unserializable(Random().nextInt(100), Random().nextInt(100));
+      val3.value = Other(val2.value.a * 11);
+      val4.value = TimedString(Random().nextInt(40).toString());
+    });
   }
 
   @override
@@ -57,16 +46,20 @@ class _MyAppState extends State<MyApp> {
         ),
         body: Center(
           child: Column(
-            children: [
-              ValueListenableBuilder(
-                  valueListenable: val.listenable,
-                  builder: (context, value, _) => Text(value.toString())),
-              ValueListenableBuilder(
-                  valueListenable: val2.listenable,
-                  builder: (context, value, _) =>
-                      Text(value.toJson(value).toString())),
-            ],
-          ),
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                ...[val1, val2, val3, val4]
+                    .map((e) => StoredValueBuilder(
+                        value: e as BaseStoredValue,
+                        builder: (context, value, _) => Text(
+                              value.toString(),
+                              textScaleFactor: 1.4,
+                            )))
+                    .toList(),
+                OutlinedButton(
+                    onPressed: () => exit(0),
+                    child: const Text("kill", textScaleFactor: 2))
+              ]),
         ),
       ),
     );

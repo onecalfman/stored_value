@@ -7,11 +7,10 @@ import 'dart:async';
 class _HVS {
   static final Set<String> sessionKeys = {};
 
-  static late Box store;
+  static late final Box box;
 
-  static init([String boxName = "hydrated_value_store"]) async {
-    await Hive.initFlutter(boxName);
-    store = await Hive.openBox(boxName);
+  static init(Box box) {
+    _HVS.box = box;
   }
 
   static bool checkKeyValidity(String key) {
@@ -21,14 +20,14 @@ class _HVS {
   }
 
   static createValue<T>(String key, T? val) {
-    if (store.get(key) == null) {
-      store.put(key, val);
+    if (box.get(key) == null) {
+      box.put(key, val);
     }
   }
 }
 
 class ValueStore {
-  static init() => _HVS.init();
+  static init(Box box) => _HVS.init(box);
 }
 
 mixin Serde<T> {
@@ -65,15 +64,15 @@ class StoredValue<T> implements BaseStoredValue<T> {
   }
 
   @override
-  T get value => _HVS.store.get(_key);
+  T get value => _HVS.box.get(_key);
 
   @override
-  set value(T val) => _HVS.store.put(_key, val);
+  set value(T val) => _HVS.box.put(_key, val);
 
   @override
   ValueListenable<T> get listenable {
     final v = ValueNotifier(value);
-    _HVS.store.listenable(keys: [_key]).addListener(() {
+    _HVS.box.listenable(keys: [_key]).addListener(() {
       v.value = value;
     });
     return v;
