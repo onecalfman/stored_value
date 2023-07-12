@@ -9,9 +9,7 @@ class _HVS {
 
   static late final Box box;
 
-  static init(Box box) {
-    _HVS.box = box;
-  }
+  static init(Box box) => _HVS.box = box;
 
   static bool checkKeyValidity(String key) {
     final res = !sessionKeys.contains(key);
@@ -35,7 +33,11 @@ mixin Serde<T> {
   Map<String, dynamic> toJson(T val);
 }
 
+typedef TypeCallback<T> = void Function(T value);
+
 abstract class BaseStoredValue<T> {
+  void onSet(TypeCallback<T> cb);
+  void onGet(TypeCallback<T> cb);
   set value(T val);
   T get value;
   ValueListenable<T> get listenable;
@@ -47,10 +49,12 @@ class StoredValue<T> implements BaseStoredValue<T> {
 
   final StreamController<T> _streamController = StreamController.broadcast();
 
-  StoredValue(this._key, [T? _value]) {
-    assert(_HVS.checkKeyValidity(_key));
-    if (_value != null) {
-      _HVS.createValue(_key, _value);
+  StoredValue(this._key, {bool allowExisting = false, T? defaultValue}) {
+    if (!allowExisting) {
+      assert(_HVS.checkKeyValidity(_key));
+    }
+    if (defaultValue != null) {
+      _HVS.createValue(_key, defaultValue);
     }
     _feedStream();
   }
@@ -63,11 +67,28 @@ class StoredValue<T> implements BaseStoredValue<T> {
     });
   }
 
-  @override
-  T get value => _HVS.box.get(_key);
+  TypeCallback<T>? _onSet;
+
+  TypeCallback<T>? _onGet;
 
   @override
-  set value(T val) => _HVS.box.put(_key, val);
+  void onSet(TypeCallback<T> cb) => _onSet = cb;
+
+  @override
+  void onGet(TypeCallback<T> cb) => _onGet = cb;
+
+  @override
+  T get value {
+    final v = _HVS.box.get(_key);
+    if (_onGet != null) _onGet!(v);
+    return v;
+  }
+
+  @override
+  set value(T val) {
+    if (_onSet != null) _onSet!(val);
+    _HVS.box.put(_key, val);
+  }
 
   @override
   ValueListenable<T> get listenable {
@@ -91,13 +112,31 @@ class StoredJsonValue<T extends Serde> implements BaseStoredValue<T> {
   StoredJsonValue(String key, T value)
       : fromJson = value.fromJson,
         toJson = value.toJson,
-        _val = StoredValue<String>(key, jsonEncode(value.toJson(value)));
+        _val = StoredValue<String>(key,
+            defaultValue: jsonEncode(value.toJson(value)));
+
+  TypeCallback<T>? _onSet;
+
+  TypeCallback<T>? _onGet;
 
   @override
-  T get value => fromJson(jsonDecode(_val.value));
+  void onSet(TypeCallback<T> cb) => _onSet = cb;
 
   @override
-  set value(T val) => _val.value = jsonEncode(toJson(val));
+  void onGet(TypeCallback<T> cb) => _onGet = cb;
+
+  @override
+  T get value {
+    final v = fromJson(jsonDecode(_val.value));
+    if (_onGet != null) _onGet!(v);
+    return v;
+  }
+
+  @override
+  set value(T val) {
+    if (_onSet != null) _onSet!(val);
+    _val.value = jsonEncode(toJson(val));
+  }
 
   @override
   ValueListenable<T> get listenable {
