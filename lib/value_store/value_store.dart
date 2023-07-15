@@ -4,28 +4,33 @@ import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/adapters.dart';
 import 'dart:async';
 
-class _HVS {
-  static final Set<String> sessionKeys = {};
+class StoredValueFactory {
+  StoredValueFactory(this._box);
 
-  static late final Box box;
+  final Set<String> _sessionKeys = {};
 
-  static init(Box box) => _HVS.box = box;
+  late final Box _box;
 
-  static bool checkKeyValidity(String key) {
-    final res = !sessionKeys.contains(key);
-    sessionKeys.add(key);
+  bool _checkKeyValidity(String key) {
+    final res = !_sessionKeys.contains(key);
+    _sessionKeys.add(key);
     return res;
   }
 
-  static createValue<T>(String key, T? val) {
-    if (box.get(key) == null) {
-      box.put(key, val);
+  _createValue<T>(String key, T? val) {
+    if (_box.get(key) == null) {
+      _box.put(key, val);
     }
   }
-}
 
-class ValueStore {
-  static init(Box box) => _HVS.init(box);
+  StoredValue<T> storedValue<T>(String key,
+          {bool allowExisting = false, T? defaultValue}) =>
+      StoredValue(this, key,
+          allowExisting: allowExisting, defaultValue: defaultValue);
+
+  StoredJsonValue<T> storedJsonValue<T extends Serde>(String key, T value,
+          {bool allowExisting = false}) =>
+      StoredJsonValue<T>(this, key, value, allowExisting: allowExisting);
 }
 
 mixin Serde<T> {
@@ -46,15 +51,17 @@ abstract class BaseStoredValue<T> {
 
 class StoredValue<T> implements BaseStoredValue<T> {
   final String _key;
+  final StoredValueFactory _factory;
 
   final StreamController<T> _streamController = StreamController.broadcast();
 
-  StoredValue(this._key, {bool allowExisting = false, T? defaultValue}) {
+  StoredValue(this._factory, this._key,
+      {bool allowExisting = false, T? defaultValue}) {
     if (!allowExisting) {
-      assert(_HVS.checkKeyValidity(_key));
+      assert(_factory._checkKeyValidity(_key));
     }
     if (defaultValue != null) {
-      _HVS.createValue(_key, defaultValue);
+      _factory._createValue(_key, defaultValue);
     }
     _feedStream();
   }
@@ -79,7 +86,7 @@ class StoredValue<T> implements BaseStoredValue<T> {
 
   @override
   T get value {
-    final v = _HVS.box.get(_key);
+    final v = _factory._box.get(_key);
     if (_onGet != null) _onGet!(v);
     return v;
   }
@@ -87,13 +94,13 @@ class StoredValue<T> implements BaseStoredValue<T> {
   @override
   set value(T val) {
     if (_onSet != null) _onSet!(val);
-    _HVS.box.put(_key, val);
+    _factory._box.put(_key, val);
   }
 
   @override
   ValueListenable<T> get listenable {
     final v = ValueNotifier(value);
-    _HVS.box.listenable(keys: [_key]).addListener(() {
+    _factory._box.listenable(keys: [_key]).addListener(() {
       v.value = value;
     });
     return v;
@@ -109,11 +116,11 @@ class StoredJsonValue<T extends Serde> implements BaseStoredValue<T> {
   dynamic Function(Map<String, dynamic> json) fromJson;
   Map<String, dynamic> Function(T val) toJson;
 
-  StoredJsonValue(String key, T value)
+  StoredJsonValue(StoredValueFactory factory, String key, T value, {bool allowExisting = false})
       : fromJson = value.fromJson,
         toJson = value.toJson,
-        _val = StoredValue<String>(key,
-            defaultValue: jsonEncode(value.toJson(value)));
+        _val = StoredValue<String>(factory, key,
+            defaultValue: jsonEncode(value.toJson(value)), allowExisting : true);
 
   TypeCallback<T>? _onSet;
 
