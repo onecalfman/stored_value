@@ -44,6 +44,7 @@ abstract class BaseStoredValue<T> {
   Stream<T> get stream;
 }
 
+@Deprecated("bloat, use SharedValue")
 class StoredValue<T> implements BaseStoredValue<T> {
   final String _key;
 
